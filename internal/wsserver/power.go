@@ -135,7 +135,8 @@ func (s *Server) handleAgentPower(client *Client, raw json.RawMessage) {
 		Success *bool `json:"success"`
 	}
 	if json.Unmarshal(raw, &event) != nil || event.Type != "power" || event.Action != "shutdown_result" ||
-		!virusscan.ValidID(event.RequestID) || event.Success == nil || event.Mode != "mock" || len(event.Message) > 4096 {
+		!virusscan.ValidID(event.RequestID) || event.Success == nil ||
+		(event.Mode != "mock" && event.Mode != "real") || len(event.Message) > 4096 {
 		s.logger.Printf("invalid power result from %s", client.Info.ID)
 		return
 	}

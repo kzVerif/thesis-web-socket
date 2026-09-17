@@ -326,16 +326,19 @@ func TestPowerSendFailure(t *testing.T) {
 	}
 }
 
-func TestPowerRejectsMalformedAndNonMockResults(t *testing.T) {
+func TestPowerRejectsMalformedAndUnknownModesButAcceptsReal(t *testing.T) {
 	h := newPowerHarness(t, []string{powerAgentA}, 100*time.Millisecond)
 	a, f := h.connect(t, powerAgentA), h.connect(t, "")
 	powerWrite(t, h.ctx, f, PowerRequest{Type: "power", Action: "shutdown", AgentID: powerAgentA, RequestID: powerRequestID})
 	assertPowerCommand(t, h, a, powerRequestID)
+	// Missing success is malformed and an unknown mode remains rejected.
 	powerWrite(t, h.ctx, a, map[string]any{"type": "power", "action": "shutdown_result", "request_id": powerRequestID, "mode": "mock"})
-	powerWrite(t, h.ctx, a, PowerResult{Type: "power", Action: "shutdown_result", RequestID: powerRequestID, Success: true, Mode: "real"})
+	powerWrite(t, h.ctx, a, PowerResult{Type: "power", Action: "shutdown_result", RequestID: powerRequestID, Success: true, Mode: "unknown"})
+	// Phase 2 real mode is valid and should resolve the pending request.
+	powerWrite(t, h.ctx, a, PowerResult{Type: "power", Action: "shutdown_result", RequestID: powerRequestID, Success: true, Mode: "real", Message: "shutdown command accepted"})
 	r := powerRead(t, h.ctx, f)
-	if r["code"] != "timeout" || r["success"] != false {
-		t.Fatalf("malformed result resolved: %v", r)
+	if r["success"] != true || r["mode"] != "real" {
+		t.Fatalf("real power result not accepted: %v", r)
 	}
 }
 
