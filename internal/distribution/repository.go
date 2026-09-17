@@ -12,9 +12,14 @@ import (
 type Repository struct{ DB *sql.DB }
 
 func (r *Repository) Authenticate(ctx context.Context, tokenHash string) (string, bool, error) {
+	return r.AuthenticatePermission(ctx, tokenHash, "files.distribute")
+}
+
+// AuthenticatePermission keeps the same session validity rules for every permission.
+func (r *Repository) AuthenticatePermission(ctx context.Context, tokenHash, permission string) (string, bool, error) {
 	var id string
 	var allowed bool
-	err := r.DB.QueryRowContext(ctx, `SELECT u.id::text, EXISTS(SELECT 1 FROM role_permissions rp JOIN permissions p ON p.id=rp.permission_id WHERE rp.role_id=u.role_id AND p.code='files.distribute') FROM user_sessions s JOIN users u ON u.id=s.user_id WHERE s.token_hash=$1 AND s.revoked_at IS NULL AND s.expires_at>NOW() AND u.status='ACTIVE'`, tokenHash).Scan(&id, &allowed)
+	err := r.DB.QueryRowContext(ctx, `SELECT u.id::text, EXISTS(SELECT 1 FROM role_permissions rp JOIN permissions p ON p.id=rp.permission_id WHERE rp.role_id=u.role_id AND p.code=$2) FROM user_sessions s JOIN users u ON u.id=s.user_id WHERE s.token_hash=$1 AND s.revoked_at IS NULL AND s.expires_at>NOW() AND u.status='ACTIVE'`, tokenHash, permission).Scan(&id, &allowed)
 	return id, allowed, err
 }
 

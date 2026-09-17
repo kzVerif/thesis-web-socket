@@ -17,6 +17,35 @@ func NewAgentRepository(db *sql.DB) *AgentRepository {
 	return &AgentRepository{db: db}
 }
 
+// ListAgentIDsByRoom distinguishes a missing room from an existing empty room
+// in one database snapshot. Registry, not the persisted status, decides online.
+func (repository *AgentRepository) ListAgentIDsByRoom(ctx context.Context, roomID string) ([]string, error) {
+	rows, err := repository.db.QueryContext(ctx, `SELECT a.id::text FROM rooms r LEFT JOIN agents a ON a.room_id=r.id WHERE r.id=$1`, roomID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	ids := []string{}
+	found := false
+	for rows.Next() {
+		found = true
+		var id sql.NullString
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		if id.Valid {
+			ids = append(ids, id.String)
+		}
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	if !found {
+		return nil, sql.ErrNoRows
+	}
+	return ids, nil
+}
+
 func (repository *AgentRepository) GetByID(ctx context.Context, id string) (*model.AgentInfo, error) {
 	var agent model.AgentInfo
 	var osInfoJSON []byte

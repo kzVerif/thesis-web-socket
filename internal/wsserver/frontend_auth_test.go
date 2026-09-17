@@ -63,7 +63,7 @@ func TestFrontendRequiresSessionCookie(t *testing.T) {
 }
 
 func TestFrontendRevalidatesSessionBeforeEveryCommand(t *testing.T) {
-	for _, kind := range []string{"screen", "performance", "process", "virus_scan", "virus_scan_list", "FILE_DISTRIBUTE"} {
+	for _, kind := range []string{"screen", "performance", "process", "virus_scan", "virus_scan_list", "FILE_DISTRIBUTE", "power"} {
 		t.Run(kind, func(t *testing.T) {
 			s := New(nil, log.New(io.Discard, "", 0), nil)
 			s.sessions = &expiredFrontendSession{}

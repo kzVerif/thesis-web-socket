@@ -61,6 +61,7 @@ Protocol สำหรับเชื่อม Next.js:
 - [`docs/frontend-screen.md`](docs/frontend-screen.md)
 - [`docs/frontend-virus-scan.md`](docs/frontend-virus-scan.md)
 - [`docs/virus-scan.md`](docs/virus-scan.md)
+- [`docs/power.md`](docs/power.md) — Mock shutdown single agent / room (Phase 1)
 
 Virus scan jobs: for an existing database, apply
 [`migrations/20260905_add_av_jobs.sql`](migrations/20260905_add_av_jobs.sql)

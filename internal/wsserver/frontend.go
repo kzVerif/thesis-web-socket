@@ -70,6 +70,10 @@ func (server *Server) HandleFrontendWebSocket(writer http.ResponseWriter, reques
 			_ = frontend.WriteJSON(map[string]any{"type": "error", "error": "invalid JSON"})
 			continue
 		}
+		if envelope.Type == "power" {
+			server.handlePowerRequest(frontend, user, tokenHash, raw)
+			continue
+		}
 		if envelope.Type == "FILE_DISTRIBUTE" {
 			if !allowed {
 				_ = frontend.WriteJSON(map[string]any{"type": "error", "error": "ไม่มี permission"})
@@ -214,6 +218,7 @@ func (server *Server) sendStreamCommand(agent *Client, stream, action string) er
 }
 
 func (server *Server) removeFrontend(frontend *FrontendClient) {
+	server.power.RemoveFrontend(frontend)
 	server.processKills.RemoveFrontend(frontend)
 	for _, roomID := range server.subscriptions.RemoveClientRooms(frontend) {
 		server.sendRoomStreamCommand(roomID, "stop")

@@ -21,3 +21,9 @@ No schema migration is needed. Frontend/process audit write failures are reporte
 to the server logger without interrupting WebSocket traffic; final scan/download
 logs are written atomically with their result updates. No automatic deletion or
 retention policy is introduced.
+
+Power operations add `power.shutdown.requested`, `power.shutdown.result`,
+`power.shutdown_room.requested`, and `power.shutdown_room.result` using the same
+best-effort audit writer. Results carry the originating user and request ID,
+single-agent success/mode/server error code or room totals and outcome counts.
+Agent-supplied messages are excluded. See [the power protocol](power.md).

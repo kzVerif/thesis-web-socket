@@ -30,6 +30,7 @@ type Server struct {
 	registry         *Registry
 	subscriptions    *SubscriptionHub
 	processKills     *ProcessKillTracker
+	power            *PowerTracker
 	logger           *log.Logger
 	frontendOrigins  []string
 	distributionRepo *distribution.Repository
@@ -43,6 +44,7 @@ func New(agents AgentStore, logger *log.Logger, frontendOrigins []string) *Serve
 		registry:        NewRegistry(),
 		subscriptions:   NewSubscriptionHub(),
 		processKills:    NewProcessKillTracker(),
+		power:           NewPowerTracker(),
 		logger:          logger,
 		frontendOrigins: frontendOrigins,
 	}
@@ -167,6 +169,10 @@ func (server *Server) readMessages(ctx context.Context, client *Client) {
 		}
 		var fields map[string]any
 		if err := json.Unmarshal(message, &fields); err == nil {
+			if fields["type"] == "power" {
+				server.handleAgentPower(client, message)
+				continue
+			}
 			if kind, _ := fields["type"].(string); server.handleAgentVirusScan(client, message, kind) {
 				continue
 			}
