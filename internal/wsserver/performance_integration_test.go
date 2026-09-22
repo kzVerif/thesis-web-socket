@@ -32,7 +32,7 @@ func (store *fakeAgentStore) UpdateStatus(_ context.Context, _ string, status st
 
 func TestFrontendPerformanceRoundTrip(t *testing.T) {
 	store := &fakeAgentStore{
-		agent:    model.AgentInfo{ID: "agent-1", Hostname: "test-agent"},
+		agent:    model.AgentInfo{ID: authTestID, Hostname: "test-agent"},
 		statuses: make(chan string, 2),
 	}
 	server := New(store, log.New(io.Discard, "", 0), []string{"frontend.test"})
@@ -51,7 +51,8 @@ func TestFrontendPerformanceRoundTrip(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer agentConn.CloseNow()
-	if err := wsjson.Write(ctx, agentConn, model.AgentInfo{ID: "agent-1"}); err != nil {
+	authenticateTestAgent(t, ctx, agentConn, authTestID)
+	if err := wsjson.Write(ctx, agentConn, model.AgentInfo{ID: authTestID}); err != nil {
 		t.Fatal(err)
 	}
 	select {
@@ -70,7 +71,7 @@ func TestFrontendPerformanceRoundTrip(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer frontendConn.CloseNow()
-	request := StreamRequest{Type: "performance", Action: "start", AgentID: "agent-1"}
+	request := StreamRequest{Type: "performance", Action: "start", AgentID: authTestID}
 	if err := wsjson.Write(ctx, frontendConn, request); err != nil {
 		t.Fatal(err)
 	}
@@ -98,11 +99,11 @@ func TestFrontendPerformanceRoundTrip(t *testing.T) {
 	if err := wsjson.Read(ctx, frontendConn, &event); err != nil {
 		t.Fatal(err)
 	}
-	if event.Type != "performance" || event.AgentID != "agent-1" || event.Data.CPUUsage != 25 {
+	if event.Type != "performance" || event.AgentID != authTestID || event.Data.CPUUsage != 25 {
 		t.Fatalf("unexpected performance event: %+v", event)
 	}
 
-	if err := wsjson.Write(ctx, frontendConn, StreamRequest{Type: "process", Action: "start", AgentID: "agent-1"}); err != nil {
+	if err := wsjson.Write(ctx, frontendConn, StreamRequest{Type: "process", Action: "start", AgentID: authTestID}); err != nil {
 		t.Fatal(err)
 	}
 	if err := wsjson.Read(ctx, agentConn, &command); err != nil {
@@ -122,11 +123,11 @@ func TestFrontendPerformanceRoundTrip(t *testing.T) {
 	if err := wsjson.Read(ctx, frontendConn, &processEvent); err != nil {
 		t.Fatal(err)
 	}
-	if processEvent.Type != "process" || processEvent.AgentID != "agent-1" || len(processEvent.Data) != 2 {
+	if processEvent.Type != "process" || processEvent.AgentID != authTestID || len(processEvent.Data) != 2 {
 		t.Fatalf("unexpected process event: %+v", processEvent)
 	}
 
-	if err := wsjson.Write(ctx, frontendConn, StreamRequest{Type: "process", Action: "kill", AgentID: "agent-1", PID: 8120}); err != nil {
+	if err := wsjson.Write(ctx, frontendConn, StreamRequest{Type: "process", Action: "kill", AgentID: authTestID, PID: 8120}); err != nil {
 		t.Fatal(err)
 	}
 	var killAccepted map[string]any
@@ -151,7 +152,7 @@ func TestFrontendPerformanceRoundTrip(t *testing.T) {
 	if err := wsjson.Read(ctx, frontendConn, &killResult); err != nil {
 		t.Fatal(err)
 	}
-	if !killResult.Success || killResult.PID != 8120 || killResult.AgentID != "agent-1" {
+	if !killResult.Success || killResult.PID != 8120 || killResult.AgentID != authTestID {
 		t.Fatalf("unexpected process kill result: %+v", killResult)
 	}
 }

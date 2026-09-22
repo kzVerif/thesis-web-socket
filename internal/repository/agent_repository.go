@@ -2,10 +2,12 @@ package repository
 
 import (
 	"context"
+	"crypto/ed25519"
 	"database/sql"
 	"encoding/json"
 	"fmt"
 
+	"ws-rat/internal/agentauth"
 	"ws-rat/internal/model"
 )
 
@@ -15,6 +17,18 @@ type AgentRepository struct {
 
 func NewAgentRepository(db *sql.DB) *AgentRepository {
 	return &AgentRepository{db: db}
+}
+
+// Credential-only query: public keys never enter frontend AgentInfo JSON.
+func (repository *AgentRepository) GetPublicKey(ctx context.Context, id string) (ed25519.PublicKey, error) {
+	var value sql.NullString
+	if err := repository.db.QueryRowContext(ctx, "SELECT public_key FROM agents WHERE id = $1", id).Scan(&value); err != nil {
+		return nil, err
+	}
+	if !value.Valid {
+		return nil, agentauth.ErrCredential
+	}
+	return agentauth.PublicKey(value.String)
 }
 
 // ListAgentIDsByRoom distinguishes a missing room from an existing empty room

@@ -1,0 +1,19 @@
+# Example only; replace placeholders. Keep tunnel credentials outside the repo.
+# Run cloudflared, REST, WS and Next.js on the same trusted host.
+tunnel: REPLACE_WITH_TUNNEL_UUID
+credentials-file: REPLACE_WITH_PROTECTED_CREDENTIALS_FILE
+ingress:
+  - hostname: lab.example.com
+    path: ^/ws/frontend$
+    service: http://127.0.0.1:8081
+  - hostname: lab.example.com
+    service: http://127.0.0.1:3000
+  - hostname: api.example.com
+    service: http://127.0.0.1:8080
+  - hostname: socket.example.com
+    path: ^/ws$
+    service: http://127.0.0.1:8081
+  - hostname: socket.example.com
+    path: ^/files/download/.*
+    service: http://127.0.0.1:8081
+  - service: http_status:404

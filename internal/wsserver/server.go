@@ -6,10 +6,13 @@ import (
 	"encoding/json"
 	"log"
 	"net/http"
+	"strings"
+	"sync"
 	"time"
 
 	"github.com/coder/websocket"
 	"github.com/coder/websocket/wsjson"
+	"ws-rat/internal/agentauth"
 	"ws-rat/internal/distribution"
 	"ws-rat/internal/model"
 )
@@ -23,23 +26,27 @@ type AgentStore interface {
 }
 
 type Server struct {
-	audit            AuditStore
-	sessions         FrontendSessionStore
-	virusScans       VirusScanStore
-	agents           AgentStore
-	registry         *Registry
-	subscriptions    *SubscriptionHub
-	processKills     *ProcessKillTracker
-	power            *PowerTracker
-	logger           *log.Logger
-	frontendOrigins  []string
-	distributionRepo *distribution.Repository
-	distributions    *distribution.Service
-	storageRoot      string
+	lifecycle           [64]sync.Mutex
+	authTimeout         time.Duration
+	audit               AuditStore
+	sessions            FrontendSessionStore
+	virusScans          VirusScanStore
+	agents              AgentStore
+	registry            *Registry
+	subscriptions       *SubscriptionHub
+	processKills        *ProcessKillTracker
+	power               *PowerTracker
+	logger              *log.Logger
+	frontendOrigins     []string
+	productionTransport bool
+	distributionRepo    *distribution.Repository
+	distributions       *distribution.Service
+	storageRoot         string
 }
 
 func New(agents AgentStore, logger *log.Logger, frontendOrigins []string) *Server {
 	return &Server{
+		authTimeout:     agentauth.Timeout,
 		agents:          agents,
 		registry:        NewRegistry(),
 		subscriptions:   NewSubscriptionHub(),
@@ -57,6 +64,12 @@ func (server *Server) ConfigureDistribution(repo *distribution.Repository, baseU
 	server.distributions = &distribution.Service{Repo: repo, Sender: server, BaseURL: baseURL, TTL: ttl}
 }
 
+// ConfigureProductionTransport tightens the browser Origin check without
+// changing cookie/session authentication or the Agent WebSocket protocol.
+func (server *Server) ConfigureProductionTransport(enabled bool) {
+	server.productionTransport = enabled
+}
+
 func (server *Server) HandleWebSocket(writer http.ResponseWriter, request *http.Request) {
 	conn, err := websocket.Accept(writer, request, nil)
 	if err != nil {
@@ -64,34 +77,55 @@ func (server *Server) HandleWebSocket(writer http.ResponseWriter, request *http.
 		return
 	}
 	defer conn.CloseNow()
+	authCtx, cancelAuth := context.WithTimeout(request.Context(), server.authTimeout)
+	defer cancelAuth()
+	authenticatedID, err := server.authenticateAgent(authCtx, conn)
+	if err != nil {
+		server.logger.Printf("agent authentication failed: %s", authFailureCategory(err))
+		// CloseNow below releases resources even if the peer ignores close frames.
+		_ = conn.Close(websocket.StatusPolicyViolation, "agent authentication failed")
+		return
+	}
+	// Bound the post-auth initial metadata too; the short auth deadline is never
+	// retained for the subsequent long-lived feature session.
 	conn.SetReadLimit(maxAgentMessageSize)
-
-	ctx := context.Background()
 	var registration model.AgentInfo
-	if err := wsjson.Read(ctx, conn, &registration); err != nil {
-		server.logger.Printf("read agent registration: %v", err)
+	if err := wsjson.Read(authCtx, conn, &registration); err != nil {
+		server.logger.Print("authenticated agent initial metadata missing or invalid")
 		return
 	}
-	if registration.ID == "" {
-		server.logger.Print("agent ID is empty")
+	registeredID, idErr := agentauth.CanonicalID(registration.ID)
+	if idErr != nil || registeredID != authenticatedID || authCtx.Err() != nil {
+		server.logger.Print("authenticated agent initial identity mismatch or timeout")
 		return
 	}
+	cancelAuth()
+	ctx := request.Context()
 
-	agent, err := server.getAgent(registration.ID)
+	agent, err := server.getAgent(authenticatedID)
 	if err != nil {
 		server.logger.Printf("cannot get agent: %v", err)
 		return
 	}
+	if agent.ID != authenticatedID {
+		server.logger.Print("agent record identity mismatch")
+		return
+	}
+	lock := server.lifecycleLock(agent.ID)
+	lock.Lock()
 	if err := server.setStatus(agent.ID, model.StatusOnline); err != nil {
+		lock.Unlock()
 		server.logger.Printf("cannot mark agent online: %v", err)
 		return
 	}
 
 	client := &Client{Info: *agent, Conn: conn}
 	previous := server.registry.Add(client)
+	lock.Unlock()
 	if previous != nil && previous.Conn != conn {
-		_ = previous.Conn.Close(websocket.StatusPolicyViolation, "replaced by a newer connection")
+		_ = previous.Conn.CloseNow()
 	}
+	server.logger.Printf("agent authenticated: id=%s", agent.ID)
 
 	done := make(chan struct{})
 	defer close(done)
@@ -125,6 +159,9 @@ func (server *Server) setStatus(id, status string) error {
 }
 
 func (server *Server) disconnect(client *Client) {
+	lock := server.lifecycleLock(client.Info.ID)
+	lock.Lock()
+	defer lock.Unlock()
 	if !server.registry.Remove(client.Info.ID, client.Conn) {
 		return
 	}
@@ -169,6 +206,10 @@ func (server *Server) readMessages(ctx context.Context, client *Client) {
 		}
 		var fields map[string]any
 		if err := json.Unmarshal(message, &fields); err == nil {
+			if kind, _ := fields["type"].(string); strings.HasPrefix(kind, "auth_") {
+				_ = client.Conn.Close(websocket.StatusPolicyViolation, "unexpected authentication message")
+				return
+			}
 			if fields["type"] == "power" {
 				server.handleAgentPower(client, message)
 				continue
@@ -206,7 +247,7 @@ func (server *Server) readMessages(ctx context.Context, client *Client) {
 				continue
 			}
 		}
-		server.logger.Printf("message from %s: %s", client.Info.Hostname, message)
+		server.logger.Printf("unhandled message from agent=%s bytes=%d", client.Info.ID, len(message))
 	}
 }
 

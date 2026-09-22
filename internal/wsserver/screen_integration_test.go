@@ -16,7 +16,7 @@ import (
 )
 
 func TestFrontendRoomScreenRoundTrip(t *testing.T) {
-	store := &fakeAgentStore{agent: model.AgentInfo{ID: "agent-1", RoomID: "room-1", Hostname: "screen-agent"}, statuses: make(chan string, 2)}
+	store := &fakeAgentStore{agent: model.AgentInfo{ID: authTestID, RoomID: "room-1", Hostname: "screen-agent"}, statuses: make(chan string, 2)}
 	server := New(store, log.New(io.Discard, "", 0), []string{"frontend.test"})
 	server.sessions = validFrontendSession{}
 	mux := http.NewServeMux()
@@ -33,7 +33,8 @@ func TestFrontendRoomScreenRoundTrip(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer agentConn.CloseNow()
-	if err := wsjson.Write(ctx, agentConn, model.AgentInfo{ID: "agent-1"}); err != nil {
+	authenticateTestAgent(t, ctx, agentConn, authTestID)
+	if err := wsjson.Write(ctx, agentConn, model.AgentInfo{ID: authTestID}); err != nil {
 		t.Fatal(err)
 	}
 	select {
@@ -70,7 +71,7 @@ func TestFrontendRoomScreenRoundTrip(t *testing.T) {
 	if err := wsjson.Read(ctx, frontendConn, &header); err != nil {
 		t.Fatal(err)
 	}
-	if header["type"] != "screen" || header["agent_id"] != "agent-1" || header["room_id"] != "room-1" {
+	if header["type"] != "screen" || header["agent_id"] != authTestID || header["room_id"] != "room-1" {
 		t.Fatalf("unexpected screen header: %+v", header)
 	}
 	messageType, frame, err := frontendConn.Read(ctx)

@@ -1,4 +1,7 @@
 .env
+.env.*
+!.env.example
+/storage/
 .gocache
 .tmp-go-cache
 migrations

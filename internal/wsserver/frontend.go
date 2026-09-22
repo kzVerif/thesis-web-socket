@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"net/url"
 	"strings"
 	"time"
 
@@ -27,6 +28,10 @@ type StreamCommand struct {
 }
 
 func (server *Server) HandleFrontendWebSocket(writer http.ResponseWriter, request *http.Request) {
+	if server.productionTransport && !server.trustedHTTPSOrigin(request.Header.Get("Origin")) {
+		http.Error(writer, "untrusted frontend origin", http.StatusForbidden)
+		return
+	}
 	cookie, err := request.Cookie("__Host-session")
 	if err != nil || cookie.Value == "" {
 		http.Error(writer, "ขาดการ login", http.StatusUnauthorized)
@@ -98,6 +103,19 @@ func (server *Server) HandleFrontendWebSocket(writer http.ResponseWriter, reques
 			_ = frontend.WriteJSON(map[string]any{"type": "error", "stream": command.Type, "agent_id": command.AgentID, "error": err.Error()})
 		}
 	}
+}
+
+func (server *Server) trustedHTTPSOrigin(origin string) bool {
+	u, err := url.Parse(origin)
+	if err != nil || u.Scheme != "https" || u.User != nil || u.Hostname() == "" || u.Path != "" || u.RawQuery != "" || u.ForceQuery || u.Fragment != "" {
+		return false
+	}
+	for _, host := range server.frontendOrigins {
+		if strings.EqualFold(host, u.Host) {
+			return true
+		}
+	}
+	return false
 }
 
 func (server *Server) handleStreamRequest(frontend *FrontendClient, request StreamRequest) error {

@@ -1,6 +1,7 @@
 package config
 
 import (
+	"fmt"
 	"os"
 	"strconv"
 	"strings"
@@ -8,6 +9,7 @@ import (
 )
 
 type Config struct {
+	TransportMode   string
 	Address         string
 	DatabaseURL     string
 	FrontendOrigins []string
@@ -16,11 +18,24 @@ type Config struct {
 	DownloadTTL     time.Duration
 }
 
+func (c Config) Validate() error {
+	if strings.TrimSpace(c.DatabaseURL) == "" {
+		return fmt.Errorf("DATABASE_URL is required; configure the environment or .env")
+	}
+	return c.validateTransport()
+}
+
 func Load() Config {
+	mode := envOrDefault("TRANSPORT_MODE", "development")
+	originsFallback := "localhost:3000,127.0.0.1:3000"
+	if mode == "production" {
+		originsFallback = ""
+	}
 	return Config{
+		TransportMode:   mode,
 		Address:         envOrDefault("SERVER_ADDRESS", ":8081"),
-		DatabaseURL:     envOrDefault("DATABASE_URL", "user=postgres password=kanghunz12 dbname=ratsystem sslmode=disable"),
-		FrontendOrigins: splitCSV(envOrDefault("FRONTEND_ORIGINS", "localhost:3000,127.0.0.1:3000")),
+		DatabaseURL:     strings.TrimSpace(os.Getenv("DATABASE_URL")),
+		FrontendOrigins: splitCSV(envOrDefault("FRONTEND_ORIGINS", originsFallback)),
 		PublicBaseURL:   envOrDefault("PUBLIC_BASE_URL", "http://localhost:8081"),
 		FileStorageRoot: envOrDefault("FILE_STORAGE_ROOT", "./storage"),
 		DownloadTTL:     time.Duration(envInt("DOWNLOAD_URL_TTL_SECONDS", 600)) * time.Second,

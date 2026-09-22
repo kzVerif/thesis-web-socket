@@ -19,6 +19,9 @@ func main() {
 	}
 
 	cfg := config.Load()
+	if err := cfg.Validate(); err != nil {
+		log.Fatal(err)
+	}
 	db, err := database.Open(cfg.DatabaseURL)
 	if err != nil {
 		log.Fatal(err)
@@ -26,6 +29,7 @@ func main() {
 	defer db.Close()
 
 	server := wsserver.New(repository.NewAgentRepository(db), log.Default(), cfg.FrontendOrigins)
+	server.ConfigureProductionTransport(cfg.TransportMode == "production")
 	server.ConfigureAudit(repository.NewAgentRepository(db))
 	server.ConfigureDistribution(&distribution.Repository{DB: db}, cfg.PublicBaseURL, cfg.FileStorageRoot, cfg.DownloadTTL)
 	server.ConfigureVirusScan(&virusscan.Repository{DB: db})

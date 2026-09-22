@@ -81,6 +81,7 @@ func TestVirusScanRoundTrip(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer agent.CloseNow()
+	authenticateTestAgent(t, ctx, agent, scanTestID)
 	if err = wsjson.Write(ctx, agent, model.AgentInfo{ID: scanTestID}); err != nil {
 		t.Fatal(err)
 	}

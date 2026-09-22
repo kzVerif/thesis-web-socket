@@ -115,6 +115,7 @@ func (h *powerHarness) connect(t *testing.T, agent string) *websocket.Conn {
 	}
 	t.Cleanup(func() { c.CloseNow() })
 	if agent != "" {
+		authenticateTestAgent(t, h.ctx, c, agent)
 		powerWrite(t, h.ctx, c, model.AgentInfo{ID: agent})
 		waitPowerCondition(t, func() bool { _, ok := h.s.registry.Get(agent); return ok })
 	}
