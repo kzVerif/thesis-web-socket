@@ -61,7 +61,7 @@ func (server *Server) ConfigureDistribution(repo *distribution.Repository, baseU
 	server.distributionRepo = repo
 	server.sessions = repo
 	server.storageRoot = storageRoot
-	server.distributions = &distribution.Service{Repo: repo, Sender: server, BaseURL: baseURL, TTL: ttl}
+	server.distributions = &distribution.Service{Repo: repo, Sender: server, BaseURL: baseURL, TTL: ttl, Logger: server.logger}
 }
 
 // ConfigureProductionTransport tightens the browser Origin check without

@@ -3,6 +3,8 @@ package main
 import (
 	"log"
 	"net/http"
+	"os"
+	"path/filepath"
 
 	"github.com/joho/godotenv"
 	"ws-rat/internal/config"
@@ -22,6 +24,10 @@ func main() {
 	if err := cfg.Validate(); err != nil {
 		log.Fatal(err)
 	}
+	workingDir, _ := os.Getwd()
+	storageRoot, _ := filepath.Abs(cfg.FileStorageRoot)
+	log.Printf("distribution config mode=%s server_address=%s public_base_url=%s file_storage_root=%s file_storage_root_abs=%s download_ttl=%s frontend_origins=%v working_dir=%s",
+		cfg.TransportMode, cfg.Address, cfg.PublicBaseURL, cfg.FileStorageRoot, storageRoot, cfg.DownloadTTL, cfg.FrontendOrigins, workingDir)
 	db, err := database.Open(cfg.DatabaseURL)
 	if err != nil {
 		log.Fatal(err)
