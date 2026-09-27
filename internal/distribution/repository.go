@@ -92,7 +92,7 @@ func (r *Repository) Create(ctx context.Context, user string, req CreateRequest)
 			return Job{}, File{}, nil, false, err
 		}
 	}
-	_, err = tx.ExecContext(ctx, `INSERT INTO logs(user_id,action,detail) VALUES($1,'job_created',jsonb_build_object('job_id',$2::text,'file_id',$3::text,'targets',$4::int))`, user, j.ID, f.ID, len(agents))
+	_, err = tx.ExecContext(ctx, `INSERT INTO logs(user_id,action,detail) VALUES($1,'job_created',jsonb_build_object('job_id',$2::text,'file_id',$3::text,'targets',$4::int,'destination_path',$5::text))`, user, j.ID, f.ID, len(agents), req.DestinationPath)
 	if err != nil {
 		return Job{}, File{}, nil, false, err
 	}

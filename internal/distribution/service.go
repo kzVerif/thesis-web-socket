@@ -8,6 +8,7 @@ import (
 	"regexp"
 	"strings"
 	"time"
+	"unicode"
 	"ws-rat/internal/downloadtoken"
 )
 
@@ -45,6 +46,9 @@ func redactedDownloadURL(value string) string {
 }
 
 func Validate(r *CreateRequest) error {
+	if err := validateDestinationPath(r.DestinationPath); err != nil {
+		return err
+	}
 	if !uuidRE.MatchString(r.FileID) {
 		return fmt.Errorf("invalid file_id")
 	}
@@ -120,7 +124,7 @@ func (s *Service) Create(ctx context.Context, user string, r CreateRequest) (Job
 			_ = s.Repo.MarkDispatch(ctx, j.ID, a.ID, "FAILED")
 			continue
 		}
-		cmd := DownloadCommand{Type: "DOWNLOAD_FILE", JobID: j.ID, FileID: f.ID, Filename: f.Filename, Size: f.Size, SHA256: f.SHA256, DownloadURL: strings.TrimRight(s.BaseURL, "/") + "/files/download/" + url.PathEscape(raw), ExpiresAt: expiry}
+		cmd := DownloadCommand{Type: "DOWNLOAD_FILE", JobID: j.ID, FileID: f.ID, Filename: f.Filename, Size: f.Size, SHA256: f.SHA256, DownloadURL: strings.TrimRight(s.BaseURL, "/") + "/files/download/" + url.PathEscape(raw), ExpiresAt: expiry, DestinationPath: r.DestinationPath}
 		s.logf("distribution target command_ready job_id=%q agent_id=%q file_id=%q filename=%q size=%d url=%q expires_at=%s",
 			j.ID, a.ID, f.ID, f.Filename, f.Size, redactedDownloadURL(cmd.DownloadURL), expiry.Format(time.RFC3339))
 		if err = s.Sender.Send(a.ID, cmd); err != nil {
@@ -149,4 +153,35 @@ func (s *Service) Create(ctx context.Context, user string, r CreateRequest) (Job
 	}
 	s.logf("distribution create complete job_id=%q file_id=%q status=%q online=%d offline=%d total=%d", j.ID, j.FileID, j.Status, j.Online, j.Offline, j.Total)
 	return j, nil
+}
+
+// Validate agent paths independently of the server's operating system.
+// The agent must also enforce its local filesystem and permission policy.
+func validateDestinationPath(value string) error {
+	if value == "" {
+		return nil
+	}
+	invalid := func() error {
+		return fmt.Errorf("invalid destination_path: expected an absolute local directory without traversal")
+	}
+	if len(value) > 4096 || strings.IndexFunc(value, unicode.IsControl) >= 0 {
+		return invalid()
+	}
+	p := strings.ReplaceAll(value, `\`, "/")
+	windows := len(p) >= 3 && ((p[0] >= 'A' && p[0] <= 'Z') || (p[0] >= 'a' && p[0] <= 'z')) && p[1:3] == ":/"
+	if strings.HasPrefix(p, "//") || (!windows && !strings.HasPrefix(value, "/")) {
+		return invalid()
+	}
+	if windows {
+		p = p[3:]
+		if strings.ContainsAny(p, `<>:"|?*`) {
+			return invalid()
+		}
+	}
+	for _, part := range strings.Split(p, "/") {
+		if part == "." || part == ".." || (windows && part != "" && (strings.HasSuffix(part, ".") || strings.HasSuffix(part, " "))) {
+			return invalid()
+		}
+	}
+	return nil
 }

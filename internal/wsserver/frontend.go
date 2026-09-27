@@ -53,6 +53,12 @@ func (server *Server) HandleFrontendWebSocket(writer http.ResponseWriter, reques
 	server.subscriptions.AddDashboard(frontend)
 	defer server.subscriptions.RemoveDashboard(frontend)
 	defer server.removeFrontend(frontend)
+	var stopScanWatch func()
+	defer func() {
+		if stopScanWatch != nil {
+			stopScanWatch()
+		}
+	}()
 
 	for {
 		var raw json.RawMessage
@@ -86,6 +92,12 @@ func (server *Server) HandleFrontendWebSocket(writer http.ResponseWriter, reques
 			}
 			if err := server.handleDistributionFrontend(frontend, user, raw); err != nil {
 				_ = frontend.WriteJSON(map[string]any{"type": "error", "error": err.Error()})
+			}
+			continue
+		}
+		if envelope.Type == "virus_scan_subscribe" || envelope.Type == "virus_scan_unsubscribe" {
+			if err := server.configureScanWatch(request.Context(), frontend, user, tokenHash, raw, &stopScanWatch); err != nil {
+				_ = frontend.WriteJSON(map[string]any{"type": "error", "stream": "virus_scan", "error": err.Error()})
 			}
 			continue
 		}

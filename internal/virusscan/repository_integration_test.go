@@ -129,6 +129,14 @@ func TestRepositoryMigrationAndMultiAgentJob(t *testing.T) {
 		t.Fatalf("ownership: %+v %v", hidden, err)
 	}
 	var before, after int
+	snapshot, err := repo.Snapshot(ctx, user, Request{JobID: job.ID, Limit: 1})
+	if err != nil || len(snapshot.Jobs) != 1 || len(snapshot.Jobs[0].Scans) != 2 || snapshot.Summary.Succeeded != 1 || snapshot.Summary.Failed != 1 {
+		t.Fatalf("snapshot must include all targets despite job limit: %+v %v", snapshot, err)
+	}
+	private, err := repo.Snapshot(ctx, "00000000-0000-0000-0000-000000000000", Request{JobID: job.ID})
+	if err != nil || len(private.Jobs) != 0 {
+		t.Fatalf("snapshot ownership: %+v %v", private, err)
+	}
 	if err := db.QueryRowContext(ctx, `SELECT count(*) FROM av_jobs`).Scan(&before); err != nil {
 		t.Fatal(err)
 	}

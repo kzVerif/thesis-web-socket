@@ -63,7 +63,7 @@ Response มี `job_id` ตามตัวกรอง และ `scans` เป
 
 กรอง `job_id`, `agent_id`, `request_id` ร่วมกันได้ (ต้องตรงทุกเงื่อนไข) หรือไม่ส่งตัวกรองเพื่อดูประวัติของผู้ใช้ทุกเครื่อง แต่ละแถวมี `job_id` ให้จัดกลุ่ม ตาราง av_jobs เก็บข้อมูลคำขอ ส่วนสถานะอ้างอิงแต่ละ target โดยไม่มี status รวมซ้ำใน av_jobs ให้ UI รอจนทุก target เป็นสถานะสุดท้ายและแสดงจำนวนสำเร็จ/ล้มเหลวแยกกัน
 
-ใช้ polling เช่นทุก 3 วินาที ไม่มี push event สำหรับผลสแกนไปหน้าบ้านใน API นี้
+`virus_scan_list` อ่านข้อมูลครั้งเดียว สำหรับหน้า dashboard แบบ realtime ใช้ `virus_scan_subscribe` ตามหัวข้อถัดไป ไม่ต้องตั้ง polling ที่ frontend
 
 ```json
 {"type":"virus_scan_list","agent_id":"11111111-1111-1111-1111-111111111111","request_id":"22222222-2222-2222-2222-222222222222"}
@@ -112,7 +112,7 @@ Response มี `job_id` ตามตัวกรอง และ `scans` เป
 | FAILED | agent ส่ง failed หรือ rejected; ดู result.status และ result.error | FAILED |
 | CANCELLED | agent ส่ง cancelled | CANCELLED |
 
-หยุด polling งานนั้นเมื่อเป็น SUCCEEDED/FAILED/CANCELLED; หากฐานข้อมูลถูกจัดการจากระบบอื่นจนเป็น EXPIRED ให้ถือเป็นสถานะสุดท้ายเช่นกัน ไม่มีเปอร์เซ็นต์ความคืบหน้าหรือคำสั่งยกเลิกจากหน้าบ้าน
+สถานะสุดท้ายคือ SUCCEEDED/FAILED/CANCELLED; หากฐานข้อมูลถูกจัดการจากระบบอื่นจนเป็น EXPIRED ให้ถือเป็นสถานะสุดท้ายเช่นกัน ไม่มีเปอร์เซ็นต์ความคืบหน้าหรือคำสั่งยกเลิกจากหน้าบ้าน
 
 **SUCCEEDED ไม่ได้แปลว่าไม่พบไวรัส**: exit code 0 อาจหมายถึงพบและจัดการแล้ว เช่นเดียวกับ FAILED ไม่ยืนยันว่าพบไวรัส ห้ามแสดงจำนวนไฟล์/ภัยคุกคามเป็น 0 จาก API นี้ เพราะ agent ไม่รายงานจำนวนเหล่านี้
 
@@ -128,17 +128,94 @@ Response มี `job_id` ตามตัวกรอง และ `scans` เป
 
 เมื่อ agent หลุด งานอาจยังสแกนอยู่ Server ไม่เปลี่ยนงานเป็น FAILED และไม่ส่งงานซ้ำ ผลที่ agent ส่งกลับหลัง reconnect ยังจับคู่และบันทึกได้ หาก agent สูญเสียผล งานอาจค้าง QUEUED/DELIVERED/RUNNING ไม่มี timeout สรุปผลเอง ให้ UI แสดงว่า “ยังไม่ได้รับผล” และเปิดให้ผู้ใช้ตรวจสอบ ไม่ควรแสดงว่าสแกนล้มเหลวจากการขาดการเชื่อมต่อเพียงอย่างเดียว
 
-## ตัวอย่าง JavaScript
+## 4. Dashboard realtime: ประวัติ, รายการ Job และผลรายเครื่อง
+
+เชื่อมต่อ **`wss://<host>/ws/frontend`** ด้วย browser WebSocket โดยใช้ session cookie เดิม แล้วส่ง:
+
+```json
+{"type":"virus_scan_subscribe","limit":20}
+```
+
+หรือดูเฉพาะ job:
+
+```json
+{"type":"virus_scan_subscribe","job_id":"55555555-5555-5555-5555-555555555555"}
+```
+
+Server ส่ง `virus_scan_snapshot` ทันทีหลังตรวจสิทธิ์และโหลดข้อมูลสำเร็จ จากนั้นส่ง snapshot ใหม่เมื่อมีการสร้างงาน ส่งคำสั่ง หรือบันทึกสถานะ/ผลจาก agent แล้วข้อมูลที่โหลดเปลี่ยน หน้าบ้านแทนที่ state เดิมทั้งก้อน ไม่ append เพราะเป็น snapshot ไม่ใช่ delta การเปลี่ยนหลายครั้งติดกันอาจถูกรวมเป็น snapshot ล่าสุด
+
+```json
+{
+  "type":"virus_scan_snapshot",
+  "summary":{
+    "loaded_jobs":1,
+    "pending_results":0,
+    "succeeded_results":1,
+    "failed_results":0
+  },
+  "jobs":[{
+    "job_id":"55555555-5555-5555-5555-555555555555",
+    "scan_type":"quick",
+    "created_at":"2026-09-05T10:00:00Z",
+    "scans":[{
+      "job_id":"55555555-5555-5555-5555-555555555555",
+      "request_id":"22222222-2222-2222-2222-222222222222",
+      "agent_id":"11111111-1111-1111-1111-111111111111",
+      "scan_type":"quick",
+      "status":"SUCCEEDED",
+      "created_at":"2026-09-05T10:00:00Z",
+      "started_at":"2026-09-05T10:00:01Z",
+      "finished_at":"2026-09-05T10:02:00Z",
+      "result":{
+        "type":"virus_scan_result",
+        "request_id":"22222222-2222-2222-2222-222222222222",
+        "scan_type":"quick",
+        "status":"completed",
+        "started_at":"2026-09-05T10:00:01Z",
+        "finished_at":"2026-09-05T10:02:00Z",
+        "report":{"exit_code":0,"output":"Defender output","output_truncated":false}
+      }
+    }]
+  }]
+}
+```
+
+| ช่องบน frontend | field | วิธีนับ |
+|---|---|---|
+| งานในประวัติที่โหลด | `summary.loaded_jobs` | จำนวน Job ใน snapshot |
+| ผลที่ยังไม่สิ้นสุด | `summary.pending_results` | ผล QUEUED / DELIVERED / RUNNING |
+| ผลสแกนที่สำเร็จ | `summary.succeeded_results` | ผล SUCCEEDED |
+| ผลสแกนที่ไม่สำเร็จ | `summary.failed_results` | ผล FAILED / CANCELLED / EXPIRED |
+| รายการ Job | `jobs` | งานใหม่ไปเก่า |
+| ผลรายเครื่อง | `jobs[].scans` | ทุกเครื่องใน Job ใช้ agent_id ระบุเครื่อง และ request_id เป็น key ของผล |
+
+
+- ตัวเลขนับเฉพาะ Job ที่โหลดมา ไม่ใช่ยอดรวมประวัติทั้งหมด; สามช่องผลนับเป็นจำนวนผลรายเครื่อง ไม่ใช่จำนวน Job
+- `limit` เป็นจำนวน **Job** 1–100 ค่าเริ่มต้น 20 (0 ใช้ค่าเริ่มต้น) แต่ละ Job โหลดผลทุกเครื่องครบ ต่างจาก `virus_scan_list` ซึ่งจำกัดจำนวนผล ไม่มี pagination
+- ใช้ `job_id` และ `limit` เป็นตัวกรอง; ไม่รับ `agent_id`, `agent_ids`, `request_id` ในคำสั่ง subscribe
+- หนึ่ง connection มี subscription สแกนหนึ่งชุด ส่ง subscribe ใหม่เพื่อเปลี่ยนตัวกรอง หลัง snapshot ของชุดใหม่มาถึงให้ใช้แทนชุดเก่า
+- ไม่พบงานหรือไม่ใช่เจ้าของจะได้ `jobs: []` และยอดสรุป 0 ทั้งหมด
+- ตรวจ session และ permission `av.scan` ก่อนโหลดทุก snapshot และตรวจซ้ำขณะ idle ทุก 30 วินาที ถ้า permission หาย subscription จะหยุดพร้อม error; หาก session ใช้ไม่ได้จะปิด socket ด้วย
+- มีการอ่านฐานข้อมูลซ้ำทุก 30 วินาทีเพื่อรับการเปลี่ยนแปลงจากระบบอื่นด้วย การ push ทันทีใช้ event ภายใน server instance เดียว; หากรันหลาย instance การเปลี่ยนแปลงจาก instance อื่นอาจช้าสูงสุดประมาณ 30 วินาที
+- หากโหลดไม่สำเร็จจะส่ง `error` และหยุด subscription ให้ frontend แสดงข้อผิดพลาดและ subscribe ใหม่เมื่อต้องการลองอีกครั้ง
+- เมื่อ reconnect ให้ subscribe ใหม่เพื่อโหลด snapshot ล่าสุด ไม่สั่งสแกนซ้ำ ไม่มีการ replay ทุก event ระหว่างที่หลุด
+
+หยุดรับข้อมูลโดยไม่ยกเลิกงานสแกน:
+
+```json
+{"type":"virus_scan_unsubscribe"}
+```
+
+ตอบ `{"type":"unsubscribed","stream":"virus_scan"}` หลังหยุด subscription แล้ว
+
+## ตัวอย่าง JavaScript realtime
 
 ```javascript
 const socket = new WebSocket(`wss://${location.host}/ws/frontend`);
 const agentId = "11111111-1111-1111-1111-111111111111";
-let timer;
-function refresh(requestId) {
-  if (socket.readyState === WebSocket.OPEN) {
-    socket.send(JSON.stringify({ type: "virus_scan_list", agent_id: agentId, request_id: requestId }));
-  }
-}
+socket.onopen = () => {
+  socket.send(JSON.stringify({ type: "virus_scan_subscribe", limit: 20 }));
+};
 // เรียกจากปุ่มสแกนเมื่อ socket เปิดแล้ว และปิดปุ่มระหว่างรอ accepted/error
 function startScan() {
   if (socket.readyState !== WebSocket.OPEN) return;
@@ -147,20 +224,15 @@ function startScan() {
 socket.onmessage = ({ data }) => {
   const event = JSON.parse(data);
   if (event.type === "virus_scan_accepted" && event.agent_id === agentId) {
-    clearInterval(timer);
-    refresh(event.request_id);
-    timer = setInterval(() => refresh(event.request_id), 3000);
+    console.log("สร้างงานแล้ว", event.job_id);
   }
-  if (event.type === "virus_scan_list" && event.agent_id === agentId) {
-    console.log(event.scans); // อัปเดต UI จากข้อมูลที่บันทึกแล้ว
-    if (event.request_id && event.scans.length &&
-        ["SUCCEEDED", "FAILED", "CANCELLED", "EXPIRED"].includes(event.scans[0].status)) {
-      clearInterval(timer);
-    }
+  if (event.type === "virus_scan_snapshot") {
+    console.log(event.summary); // setSummary(event.summary)
+    console.log(event.jobs); // setJobs(event.jobs) แทนที่ state ทั้งก้อน
   }
   if (event.type === "error" && event.stream === "virus_scan") console.error(event.error);
 };
-socket.onclose = () => clearInterval(timer);
+socket.onclose = () => console.log("ขาดการเชื่อมต่อ; เมื่อเชื่อมใหม่ให้ subscribe ใหม่");
 ```
 
 ## การบันทึกและติดตั้ง
@@ -178,7 +250,6 @@ Migration ทำใน transaction: เพิ่ม av_jobs, backfill job เก
 - สร้าง av_jobs พร้อม commands และ av_scan_results ของทุกเครื่อง และ logs ใน transaction ก่อนส่งคำสั่งใด ๆ
 - เก็บผู้สั่ง/scan_type/path ใน av_jobs และ scan_type/path ใน commands.payload; command ID เป็น request ID ต่อเครื่อง ส่วน job ID ใช้เชื่อมกลุ่มงาน
 - เก็บ event ทั้งก้อนรวม report/error ใน av_scan_results.threat_details โดยไม่ parse ข้อความ Defender เพื่อคาดเดาภัยคุกคาม
-- คอลัมน์ total_files_scanned/threats_found เดิมยังเป็น default 0 ของ schema ซึ่งหมายถึงไม่มีข้อมูลใน integration นี้ ไม่ส่งสองค่านี้ใน API
 - อัปเดตสถานะและ audit log ใน transaction ตรวจ command ID, agent ID จาก connection และ scan_type ให้ตรงกัน ผลหลังสถานะสุดท้ายจะไม่เขียนทับผลเดิม
 - หากฐานข้อมูลบันทึกผลไม่ได้ server เขียน error ลง log; protocol agent ยังไม่มี acknowledgement/retry ที่รับประกันผลถึง server
 

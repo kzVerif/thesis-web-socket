@@ -31,6 +31,8 @@ type Server struct {
 	audit               AuditStore
 	sessions            FrontendSessionStore
 	virusScans          VirusScanStore
+	scanWatchMu         sync.Mutex
+	scanWatchers        map[chan struct{}]struct{}
 	agents              AgentStore
 	registry            *Registry
 	subscriptions       *SubscriptionHub

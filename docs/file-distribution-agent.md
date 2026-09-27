@@ -23,6 +23,7 @@ Agent -- FILE_DOWNLOAD_RESULT --> WebSocket Server
   "job_id": "8b66e1fd-987f-4cb3-a316-a00c5dc47b7c",
   "file_id": "2f07cc9a-9cc7-4ff3-8b40-c38965a25bd9",
   "filename": "example.zip",
+  "destination_path": "D:\\Shared Files\\Lessons",
   "size": 58382912,
   "sha256": "abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890",
   "download_url": "https://server.example.com/files/download/opaque-token",
@@ -31,6 +32,16 @@ Agent -- FILE_DOWNLOAD_RESULT --> WebSocket Server
 ```
 
 แต่ละ Agent ได้ token คนละตัว Token ผูกกับ `job_id`, `file_id`, `agent_id` และวันหมดอายุ ห้าม cache URL เพื่อใช้กับ job หรือ Agent อื่น
+
+## เลือกโฟลเดอร์ปลายทาง
+
+`destination_path` เป็น optional absolute local directory บนเครื่อง Agent ไม่รวมชื่อไฟล์ หากไม่มีฟิลด์นี้หรือเป็น `""` ให้ใช้โฟลเดอร์เริ่มต้นเดิม หากระบุ ให้ใช้โฟลเดอร์นั้นและต่อกับ `filename` เช่น `D:\Shared Files\Lessons\example.zip` ห้าม fallback ไปโฟลเดอร์อื่นเงียบ ๆ เมื่อ path ใช้งานไม่ได้
+
+Server รองรับรูปแบบ Windows drive path และ POSIX path โดยไม่อิง OS ของ Server และปฏิเสธ relative path, UNC/device path, control characters และส่วน `.` / `..` แต่ Agent ยังต้องตรวจว่าเป็น absolute path ที่ตรงกับ OS ของตัวเอง ตรวจสิทธิ์และ policy การเขียนไฟล์ รวมถึง symlink/junction ที่อาจพาออกจากโฟลเดอร์ที่อนุญาต ตรวจ `filename` ให้เป็นชื่อไฟล์เดี่ยว ไม่มี separators หรือ traversal ก่อนนำมาต่อ path ไม่ขยาย environment variables หรือเรียก shell เพื่อแปล path
+
+Agent สามารถสร้างโฟลเดอร์ที่ยังไม่มีตาม policy ของเครื่อง ดาวน์โหลดเป็น temporary file ในโฟลเดอร์นั้น และตรวจ size/SHA-256 ก่อน rename เหมือนเดิม หาก path ไม่ถูกต้องให้รายงาน `FAILED` / `INVALID_DESTINATION_PATH` หากสร้างโฟลเดอร์หรือเขียนไม่ได้ให้รายงาน `FAILED` / `WRITE_FAILED` โดยไม่ส่ง path ภายในเครื่องใน error message
+
+Repo นี้เพิ่มเฉพาะการรับและส่งต่อ field ฝั่ง Server ต้องอัปเดต implementation ของ Agent ให้รองรับก่อนเปิดใช้ custom path ในหน้าเว็บ
 
 ## ดาวน์โหลดผ่าน HTTPS
 
@@ -168,4 +179,3 @@ Production ต้องใช้ HTTPS และตั้ง timeout ของ H
 การหลุดของ WebSocket ระหว่าง HTTP download ไม่ได้ยกเลิก HTTP request โดยอัตโนมัติ Agent สามารถดาวน์โหลดต่อและส่ง result หลัง reconnect ได้ ตราบใดที่ token และ target ยัง valid
 
 เมื่อ Server เพิ่ม retry command ในอนาคต Agent ต้องถือว่า command ที่มี `job_id` เดิมแต่ `download_url` ใหม่เป็น attempt ใหม่ และห้าม reuse URL เก่า
-

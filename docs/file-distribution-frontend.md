@@ -49,6 +49,30 @@ UUID ซ้ำถูก deduplicate ฝั่ง Server หากมี UUID ไ
 
 `request_id` เป็น UUID ที่ Frontend สร้างหนึ่งค่าต่อ user action เมื่อ reconnect หรือไม่ได้รับ response ให้ส่ง request เดิมพร้อม `request_id` เดิม เพื่อไม่สร้าง job ซ้ำ ห้ามสร้าง `request_id` ใหม่สำหรับ retry transport ของ action เดิม
 
+## กำหนดโฟลเดอร์ปลายทาง
+
+เพิ่ม `destination_path` ในระดับเดียวกับ `file_id` ของ `FILE_DISTRIBUTE` ได้ทั้ง target แบบ ROOM และ AGENTS เช่น:
+
+```json
+{
+  "type": "FILE_DISTRIBUTE",
+  "file_id": "2f07cc9a-9cc7-4ff3-8b40-c38965a25bd9",
+  "destination_path": "D:\\Shared Files\\Lessons",
+  "target": {
+    "type": "ROOM",
+    "room_id": "59416395-f06f-4e66-9297-bf601693b7ae"
+  }
+}
+```
+
+ค่านี้เป็น **โฟลเดอร์บนเครื่อง Agent** ไม่รวมชื่อไฟล์ เช่นไฟล์ `example.zip` จะลงที่ `D:\Shared Files\Lessons\example.zip` และใช้โฟลเดอร์เดียวกันกับทุก target ใน job ถ้าไม่ส่งหรือส่ง `""` จะใช้โฟลเดอร์เริ่มต้นของ Agent
+
+รองรับ absolute local path แบบ Windows (`D:\Shared Files`) และ POSIX (`/srv/shared`) ไม่รองรับ relative path, UNC/network path, device path, control characters หรือส่วน `.` / `..` จำกัดความยาว 4096 bytes และไม่ขยาย environment variables เช่น `%USERPROFILE%` หรือ `~` ฝั่ง Server ไม่แก้ไข path ที่ผ่าน validation
+
+Frontend ต้องเพิ่มช่องกรอกโฟลเดอร์และส่งฟิลด์นี้ ส่วน Agent ต้องรองรับ `destination_path` ตามเอกสาร Agent ก่อนใช้งานจริง Agent รุ่นเก่าอาจเพิกเฉยต่อฟิลด์ใหม่และยังลงโฟลเดอร์เดิม Server ตรวจรูปแบบเท่านั้น ไม่สามารถตรวจว่าโฟลเดอร์มีอยู่หรือเขียนได้บนเครื่อง Agent
+
+ค่า path บันทึกใน audit log `job_created` โดยไม่ต้องเปลี่ยน schema ของ job หากเปลี่ยน path ให้สร้าง action ใหม่พร้อม `request_id` ใหม่ การส่ง `request_id` เดิมยังคืน job เดิมโดยไม่ dispatch ซ้ำ
+
 ## Response หลังสร้าง Job
 
 Frontend ได้ response ทันทีหลัง snapshot และ dispatch โดยไม่รอ download เสร็จ:
@@ -161,7 +185,7 @@ export function useFileDistribution() {
     return () => socket.close();
   }, []);
 
-  function distributeToAgents(fileId: string, agentIds: string[]) {
+  function distributeToAgents(fileId: string, agentIds: string[], destinationPath?: string) {
     const socket = socketRef.current;
     if (!socket || socket.readyState !== WebSocket.OPEN) {
       throw new Error("WebSocket is not connected");
@@ -170,6 +194,7 @@ export function useFileDistribution() {
       type: "FILE_DISTRIBUTE",
       request_id: crypto.randomUUID(),
       file_id: fileId,
+      destination_path: destinationPath || undefined,
       target: { type: "AGENTS", agent_ids: agentIds },
     }));
   }

@@ -73,6 +73,7 @@ func (s *Server) handleVirusScanFrontend(f *FrontendClient, user string, raw jso
 		s.logger.Printf("create scan: %v", err)
 		return fmt.Errorf("cannot create scan")
 	}
+	s.notifyScanWatchers()
 	// All targets are committed before any agent receives a command.
 	var wg sync.WaitGroup
 	for i := range job.Targets {
@@ -96,6 +97,7 @@ func (s *Server) handleVirusScanFrontend(f *FrontendClient, user string, raw jso
 		}(&job.Targets[i])
 	}
 	wg.Wait()
+	s.notifyScanWatchers()
 	response := map[string]any{"type": "virus_scan_accepted", "job_id": job.ID, "scan_type": req.ScanType, "targets": job.Targets, "total_targets": len(job.Targets)}
 	// Keep the original acknowledgement fields for single-agent callers.
 	if len(job.Targets) == 1 {
@@ -127,6 +129,8 @@ func (s *Server) handleAgentVirusScan(client *Client, raw json.RawMessage, kind 
 	defer cancel()
 	if err := s.virusScans.Apply(ctx, client.Info.ID, e); err != nil {
 		s.logger.Printf("persist scan %s from %s: %v", e.RequestID, client.Info.ID, err)
+	} else {
+		s.notifyScanWatchers()
 	}
 	return true
 }

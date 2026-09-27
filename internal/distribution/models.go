@@ -8,9 +8,10 @@ type File struct {
 }
 type Agent struct{ ID, Hostname string }
 type CreateRequest struct {
-	RequestID string `json:"request_id"`
-	FileID    string `json:"file_id"`
-	Target    Target `json:"target"`
+	DestinationPath string `json:"destination_path,omitempty"`
+	RequestID       string `json:"request_id"`
+	FileID          string `json:"file_id"`
+	Target          Target `json:"target"`
 }
 type Target struct {
 	Type     string   `json:"type"`
@@ -22,14 +23,15 @@ type Job struct {
 	Total, Online, Offline int
 }
 type DownloadCommand struct {
-	Type        string    `json:"type"`
-	JobID       string    `json:"job_id"`
-	FileID      string    `json:"file_id"`
-	Filename    string    `json:"filename"`
-	Size        int64     `json:"size"`
-	SHA256      string    `json:"sha256"`
-	DownloadURL string    `json:"download_url"`
-	ExpiresAt   time.Time `json:"expires_at"`
+	DestinationPath string    `json:"destination_path,omitempty"`
+	Type            string    `json:"type"`
+	JobID           string    `json:"job_id"`
+	FileID          string    `json:"file_id"`
+	Filename        string    `json:"filename"`
+	Size            int64     `json:"size"`
+	SHA256          string    `json:"sha256"`
+	DownloadURL     string    `json:"download_url"`
+	ExpiresAt       time.Time `json:"expires_at"`
 }
 type Progress struct {
 	Type            string `json:"type"`
