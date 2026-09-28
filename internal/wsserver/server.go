@@ -38,6 +38,7 @@ type Server struct {
 	subscriptions       *SubscriptionHub
 	processKills        *ProcessKillTracker
 	power               *PowerTracker
+	installedApps       *InstalledAppsTracker
 	logger              *log.Logger
 	frontendOrigins     []string
 	productionTransport bool
@@ -54,6 +55,7 @@ func New(agents AgentStore, logger *log.Logger, frontendOrigins []string) *Serve
 		subscriptions:   NewSubscriptionHub(),
 		processKills:    NewProcessKillTracker(),
 		power:           NewPowerTracker(),
+		installedApps:   NewInstalledAppsTracker(),
 		logger:          logger,
 		frontendOrigins: frontendOrigins,
 	}
@@ -126,6 +128,7 @@ func (server *Server) HandleWebSocket(writer http.ResponseWriter, request *http.
 	lock.Unlock()
 	if previous != nil && previous.Conn != conn {
 		_ = previous.Conn.CloseNow()
+		server.installedApps.FailAgent(previous)
 	}
 	server.logger.Printf("agent authenticated: id=%s", agent.ID)
 
@@ -161,6 +164,8 @@ func (server *Server) setStatus(id, status string) error {
 }
 
 func (server *Server) disconnect(client *Client) {
+	// Must also clean requests owned by a replaced connection (Remove returns false).
+	defer server.installedApps.FailAgent(client)
 	lock := server.lifecycleLock(client.Info.ID)
 	lock.Lock()
 	defer lock.Unlock()
@@ -204,6 +209,13 @@ func (server *Server) readMessages(ctx context.Context, client *Client) {
 				continue
 			}
 			server.subscriptions.PublishProcesses(client.Info.ID, processes)
+			continue
+		}
+		var envelope struct {
+			Type string `json:"type"`
+		}
+		if json.Unmarshal(message, &envelope) == nil && envelope.Type == "installed_apps" {
+			server.handleAgentInstalledApps(client, message)
 			continue
 		}
 		var fields map[string]any
