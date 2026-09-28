@@ -123,7 +123,9 @@ Server ตรวจ SHA-256 กับฐานข้อมูลอีกคร�
 }
 ```
 
-แนะนำ error codes: `HTTP_ERROR`, `TOKEN_EXPIRED`, `DISK_FULL`, `WRITE_FAILED`, `SIZE_MISMATCH`, `HASH_MISMATCH`, `CANCELLED`
+Server รองรับ `code` และ `error` เป็นชื่อทางเลือก โดยบันทึกลง `error_code` และ `error_message` ใน `file_distribution_targets` ตามลำดับ หากฟิลด์ `error_code` หรือ `error_message` มีค่าที่ไม่ว่างอยู่แล้ว จะใช้ค่านั้นก่อนชื่อทางเลือก
+
+แนะนำ error codes: `HTTP_ERROR`, `TOKEN_EXPIRED`, `DISK_FULL`, `WRITE_FAILED`, `INVALID_DESTINATION_PATH`, `SIZE_MISMATCH`, `HASH_MISMATCH`, `CANCELLED`
 
 อย่าส่ง path ภายในเครื่อง, token, credential หรือข้อมูลลับใน `error_message`
 

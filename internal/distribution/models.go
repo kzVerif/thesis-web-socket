@@ -1,6 +1,9 @@
 package distribution
 
-import "time"
+import (
+	"encoding/json"
+	"time"
+)
 
 type File struct {
 	ID, Filename, StoragePath, SHA256 string
@@ -52,6 +55,29 @@ type Result struct {
 	ErrorMessage    string `json:"error_message"`
 	BytesDownloaded int64  `json:"bytes_downloaded"`
 }
+
+// UnmarshalJSON accepts agent error aliases while keeping the canonical fields
+// used by persistence and outgoing JSON.
+func (r *Result) UnmarshalJSON(data []byte) error {
+	type result Result
+	var payload struct {
+		result
+		Code  string `json:"code"`
+		Error string `json:"error"`
+	}
+	if err := json.Unmarshal(data, &payload); err != nil {
+		return err
+	}
+	if payload.ErrorCode == "" {
+		payload.ErrorCode = payload.Code
+	}
+	if payload.ErrorMessage == "" {
+		payload.ErrorMessage = payload.Error
+	}
+	*r = Result(payload.result)
+	return nil
+}
+
 type Update struct {
 	Type            string `json:"type"`
 	JobID           string `json:"job_id"`
